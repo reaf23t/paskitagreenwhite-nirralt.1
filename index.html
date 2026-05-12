@@ -1,13 +1,2086 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="download_date" content="2026-05-12T15:14:13.557Z"/>
+    <script type="module" src="https://ais-dev-v3dkvqem2spqjaeuaykprf-145694151343.us-east1.run.app/@vite/client"></script>
 
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FONTES DO FOLDEN PASKETA</title>
+  <script>(() => {
+  if (window.self === window.top) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('__auto_close')) {
+      window.close();
+    }
+    // Do not run the shim in the main window, only in iframes.
+    return;
+  }
+
+  window.API_KEY = 'GEMINI_API_KEY';
+  window.GEMINI_API_KEY = 'GEMINI_API_KEY';
+  window.process = window.process || {};
+  window.process.env = window.process.env || {};
+  window.process.env.API_KEY = window.API_KEY;
+  window.process.env.GEMINI_API_KEY = window.GEMINI_API_KEY;
+
+  const bootstrapChannel = new Promise((resolve) => {
+    window.addEventListener('message', (event) => {
+      try {
+        const url = new URL(event.origin);
+        if (!url.hostname.endsWith('.google.com')) {
+          return;
+        }
+      } catch (e) {
+        return;
+      }
+
+      if (event.data.type === 'bootstrap') {
+        resolve({
+          port: event.ports[0],
+          urlPatterns:
+              event.data.urlPatterns.map((pattern) => new RegExp(pattern)),
+        });
+      }
+    });
+  });
+
+  window.aistudio = window.aistudio || {
+    handleFullscreenEsc: true,
+    getHostUrl: async function() {
+      const hostPort = (await bootstrapChannel).port;
+      return new Promise((resolve) => {
+        const channel = new MessageChannel();
+        hostPort.postMessage(
+            {type: 'get_host_url'},
+            [channel.port2]);
+        const port = channel.port1;
+        port.onmessage = (message) => {
+          resolve(message.data.url);
+        };
+      });
+    },
+    hasSelectedApiKey: async function() {
+      const hostPort = (await bootstrapChannel).port;
+      return new Promise((resolve) => {
+        const channel = new MessageChannel();
+        hostPort.postMessage(
+            {type: 'has_selected_api_key'},
+            [channel.port2]);
+        const port = channel.port1;
+        port.onmessage = (message) => {
+          resolve(message.data);
+        };
+      });
+    },
+    openSelectKey: async function() {
+      const hostPort = (await bootstrapChannel).port;
+      const channel = new MessageChannel();
+      hostPort.postMessage(
+          {type: 'open_select_key'},
+          [channel.port2]);
+    },
+    getModelQuota: async function(model) {
+      const hostPort = (await bootstrapChannel).port;
+      return new Promise((resolve) => {
+        const channel = new MessageChannel();
+        hostPort.postMessage(
+            {type: 'get_model_quota', model},
+            [channel.port2]);
+        const port = channel.port1;
+        port.onmessage = (message) => {
+          resolve(message.data.modelQuota);
+        };
+      });
+    },
+  };
+
+  const nativeFetch = window.fetch;
+
+  /**
+   * @param {string | URL | Request} resource The resource of the fetch request.
+   * @param {RequestInit} options The options of the fetch request.
+   * @return {Promise!} The promise of the fetch request.
+   */
+  async function fetch(resource, options) {
+    const config = await bootstrapChannel;
+
+    const request = resource instanceof Request ?
+      resource.clone() :
+      new Request(resource, options);
+
+    if (!config.urlPatterns.some((pattern) => request.url.match(pattern))) {
+      return nativeFetch(resource, options);
+    }
+    const hostPort = config.port;
+
+    const channel = new MessageChannel();
+    const port = channel.port1;
+    let bodyBytes;
+    const transfer = [channel.port2];
+    const parts = [];
+    const buffer = await request.arrayBuffer();
+    if (buffer.byteLength) {
+      bodyBytes = buffer;
+      transfer.push(bodyBytes);
+    }
+    hostPort.postMessage(
+        {
+          type: 'fetch',
+          url: request.url,
+          method: request.method,
+          headers: [...request.headers.entries()],
+          body: bodyBytes,
+        },
+        transfer);
+
+    let streamController;
+    const body = new ReadableStream({
+      start(controller) {
+        streamController = controller;
+      },
+    });
+    let resolveReceive;
+    const receivePromise = new Promise((resolve) => {
+      resolveReceive = resolve;
+    });
+    port.onmessage = (message) => {
+      switch (message.data.type) {
+        case 'response':
+          resolveReceive(new Response(body, {
+            status: message.data.status,
+            statusText: message.data.statusText,
+            headers: new Headers(message.data.headers),
+          }));
+          break;
+        case 'body':
+          streamController.enqueue(message.data.data);
+          break;
+        case 'body_done':
+          streamController.close();
+          break;
+      }
+    };
+    return receivePromise;
+  }
+
+  Object.defineProperty(window, 'fetch', {
+    get: function() {
+      return fetch;
+    },
+  });
+
+  // See details in: https://github.com/angular/angular/issues/63064.
+  function patchHistoryStateFunctionForAngular(originalFn, baseHref) {
+    return (state, unused, url) => {
+      if (typeof url === 'string' && !url.startsWith('blob:')) {
+        url = baseHref + url;
+      }
+      return originalFn.apply(window.history, [state, unused, url]);
+    };
+  }
+
+  const originalWebSocket = window.WebSocket;
+  class ProxiedWebSocket extends EventTarget {
+    /**
+     * @param {string} url The url of the websocket.
+     * @param {Object!} protocols The protocols of the websocket.
+     */
+    constructor(url, protocols) {
+      super();
+      this.url = url;
+      this.protocols = protocols;
+
+      this.open();
+    }
+
+    /** Opens the websocket. */
+    async open() {
+      const hostPort = (await bootstrapChannel).port;
+      const channel = new MessageChannel();
+      hostPort.postMessage(
+          {type: 'websocket_open', url: this.url, protocols: this.protocols},
+          [channel.port2]);
+      this.port = channel.port1;
+      this.port.onmessage = (message) => {
+        if (message.data.type === 'close') {
+          const event = new CloseEvent('close', {
+            code: message.data.code,
+            reason: message.data.reason,
+            wasClean: message.data.wasClean,
+          });
+          if (this.onclose) {
+            this.onclose(event);
+          }
+          this.dispatchEvent(event);
+          return;
+        } else if (message.data.type === 'open') {
+          const event = new Event('open');
+          if (this.onopen) {
+            this.onopen(event);
+          }
+          this.dispatchEvent(event);
+          return;
+        } else if (message.data.type === 'message') {
+          let data = message.data.data;
+          if (message.data.messageType === 'text' || message.data.messageType === 'message') {
+            data = new TextDecoder().decode(data);
+          }
+          const event = new MessageEvent('message', {
+            data,
+            type: message.data.messageType,
+          });
+          if (this.onmessage) {
+            this.onmessage(event);
+          }
+          this.dispatchEvent(event);
+          return;
+        } else if (message.data.type === 'error') {
+          const event = new ErrorEvent('error', {
+            message: message.data.message,
+          });
+          if (this.onerror) {
+            this.onerror(event);
+          }
+          this.dispatchEvent(event);
+          return;
+        }
+        console.error('received unknown message in frame', event.data);
+      };
+    }
+    /**
+     * @param {string|ArrayBuffer!} data The data to send.
+     */
+    send(data) {
+      if (typeof data === 'string') {
+        this.port.postMessage({type: 'send', data});
+      } else {
+        this.port.postMessage({type: 'send', data}, [data.buffer]);
+      }
+    }
+
+    /**
+     * @param {number} code The code of the close event.
+     * @param {string} reason The reason of the close event.
+     */
+    close(code, reason) {
+      this.port.postMessage({type: 'close', code, reason});
+    }
+  }
+
+  /**
+   * @param {string} url The url of the websocket.
+   * @param {Object!} protocols The protocols of the websocket.
+   * @return {WebSocket!} The websocket.
+   */
+  function createWebSocket(url, protocols) {
+    // This should come from the bootstrap channel, but we want this to
+    // work for the synchronous constructor here.
+    if (url.startsWith('wss://generativelanguage.googleapis.com/')) {
+      return Reflect.construct(ProxiedWebSocket, [url, protocols]);
+    }
+    return Reflect.construct(originalWebSocket, [url, protocols]);
+  }
+
+  Object.defineProperty(window, 'WebSocket', {
+    get: function() {
+      const fn = createWebSocket;
+      Object.keys(originalWebSocket).forEach((key) => {
+        Object.defineProperty(fn, key, {
+          value: originalWebSocket[key],
+        });
+      });
+      return fn;
+    },
+  });
+
+  async function instrumentErrorReporting() {
+    const errors = [];
+    let hostPort;
+
+    function reportError(message) {
+      if (!hostPort) {
+        errors.push(message);
+      } else {
+        hostPort.postMessage({type: 'error', message: message}, message);
+      }
+    }
+
+    function serialize(args) {
+      return args.map((a) => {
+        if (a instanceof Error || a instanceof ErrorEvent) {
+          return a.message;
+        }
+        if(a instanceof CloseEvent) {
+          return {code: a.code, reason: a.reason, wasClean: a.wasClean};
+        }
+        if( a instanceof Map) {
+          return JSON.parse(JSON.stringify([...a.entries()]));
+        }
+        if( a instanceof Set) {
+          return JSON.parse(JSON.stringify([...a.values()]));
+        }
+        if (a instanceof Object) {
+          return JSON.parse(JSON.stringify(a));
+        }
+        return a;
+      });
+    }
+
+    const originalConsole = window.console;
+    const originalConsoleLog = window.console.log;
+    const originalConsoleError = window.console.error;
+    const originalConsoleWarn = window.console.warn;
+    const originalConsoleDebug = window.console.debug;
+    window.console = {
+      ...originalConsole,
+      log: (message, ...args) => {
+        originalConsoleLog.apply(window.console, [message, ...args]);
+        const combined = serialize([message, ...args]);
+        reportError({type: 'console_log', message: combined });
+      },
+      debug: (message, ...args) => {
+        originalConsoleDebug.apply(window.console, [message, ...args]);
+        const combined = serialize([message, ...args]);
+        reportError({type: 'console_debug', message: combined });
+      },
+      error: (message, ...args) => {
+        originalConsoleError.apply(window.console, [message, ...args]);
+        const combined = serialize([message, ...args]);
+        reportError({type: 'console_error', message: combined });
+      },
+      warn: (message, ...args) => {
+        originalConsoleWarn.apply(window.console, [message, ...args]);
+        const combined = serialize([message, ...args]);
+        reportError({type: 'console_warn', message: combined });
+      },
+    };
+
+    window.onerror = (message, source, lineno, colno, error) => {
+      reportError({type: 'error', message: serialize([message]), source, lineno, colno, error});
+    };
+
+    window.onunhandledrejection = (event) => {
+      reportError({type: 'unhandledrejection', message: serialize([event.reason])});
+    };
+
+    window.alert = (message) => {
+      reportError({type: 'alert', message: serialize([message]) });
+    };
+
+    hostPort = (await bootstrapChannel).port;
+    for(const error of errors) {
+      hostPort.postMessage({type: 'error', message: error});
+    }
+  }
+
+  const availableFiles = new Set(window.APPLET_FILES || []);
+
+  instrumentErrorReporting();
+
+  const notifyLocationChange = async () => {
+    const hostPort = (await bootstrapChannel).port;
+    hostPort.postMessage({type: 'locationchange', href: location.href});
+  };
+
+  // Send initial state on load.
+  notifyLocationChange();
+
+  const originalPushState = history.pushState;
+  history.pushState = (...args) => {
+    originalPushState.apply(history, args);
+    notifyLocationChange();
+  };
+
+  const originalReplaceState = history.replaceState;
+  history.replaceState = (...args) => {
+    originalReplaceState.apply(history, args);
+    notifyLocationChange();
+  };
+  window.addEventListener('popstate', (e) => {
+    notifyLocationChange();
+  });
+
+  window.addEventListener('hashchange', async (e) =>{
+    const config = await bootstrapChannel;
+    const hostPort = config.port;
+    hostPort.postMessage({type: 'hashchange', hash: window.location.hash});
+    hostPort.postMessage({
+      type: 'locationchange',
+      href: location.href,
+    });
+  });
+
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/html2canvas-pro';
+  script.onload = () => {
+    window.addEventListener('message', async (event) => {
+      if (event.data?.type === 'capture-screenshot') {
+        try {
+          const canvas = await html2canvas(document.documentElement, {
+            logging: false,
+            useCORS: true,
+            backgroundColor: null,
+            scale: 1,
+          });
+          const hostPort = (await bootstrapChannel).port;
+          hostPort.postMessage(
+            {
+              type: 'screenshot-result',
+              dataUrl: canvas.toDataURL('image/png'),
+              requestId: event.data.requestId,
+              scrollX: document.body.scrollLeft,
+              scrollY: document.body.scrollTop,
+            },
+          );
+        } catch (e) {
+          const hostPort = (await bootstrapChannel).port;
+          hostPort.postMessage(
+            {
+              type: 'screenshot-error',
+              error: e.message,
+              requestId: event.data.requestId,
+            });
+        }
+      }
+    });
+  };
+  document.head.appendChild(script);
+
+  const MAX_ANCESTOR_LEVEL = 3;
+  const MAX_DESCENDANT_LEVEL = 3;
+
+  function getElementSelector(el) {
+    if (!el || el.nodeType !== 1) {
+      return '';
+    }
+    const parts = [];
+    while(el && el.nodeType === 1 && el.tagName.toLowerCase() !== 'body') {
+      let part = el.tagName.toLowerCase();
+      if (el.id) {
+        part += '#' + CSS.escape(el.id);
+      }
+
+      const parent = el.parentElement;
+      if (parent) {
+        let nth = 1;
+        let prev = el.previousElementSibling;
+        while(prev) {
+          if (prev.tagName === el.tagName) {
+            nth++;
+          }
+          prev = prev.previousElementSibling;
+        }
+        part += ':nth-of-type(' + nth + ')';
+      }
+
+      parts.unshift(part);
+      el = el.parentElement;
+    }
+    return parts.join(' > ');
+  }
+
+  function getDomTreeAsString(element, depth, maxDepth) {
+    if (!element || element.nodeType !== 1 || depth > maxDepth) {
+      return '';
+    }
+    const tagName = element.tagName.toLowerCase();
+    let attrs = [];
+    if (element.id) {
+      attrs.push('id="' + element.id + '"');
+    }
+    if (element.classList.length > 0) {
+      attrs.push('class="' + element.classList.value + '"');
+    }
+    const attrString = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
+
+    let content = '';
+    for (const node of element.childNodes) {
+      if (node.nodeType === 1) { // Element node
+        content += getDomTreeAsString(node, depth + 1, maxDepth);
+      } else if (node.nodeType === 3) { // Text node
+        content += node.textContent;
+      }
+    }
+
+    return '<' + tagName + attrString + '>' + content + '</' + tagName + '>';
+  }
+
+  let activeElementCss = {};
+
+  function getElementInfo(element, isUpdate = false) {
+    const selector = getElementSelector(element);
+    let levelsUp = 0;
+    let root = element;
+    while(levelsUp < MAX_ANCESTOR_LEVEL && root.parentElement && root.parentElement.tagName.toLowerCase() !== 'html') {
+      root = root.parentElement;
+      levelsUp++;
+    }
+    const domString = getDomTreeAsString(root, 0, levelsUp + MAX_DESCENDANT_LEVEL);
+
+    if (!isUpdate) {
+      const styles = window.getComputedStyle(element);
+      activeElementCss = {};
+      for (let i = 0; i < styles.length; i++) {
+        const key = styles[i];
+        activeElementCss[key] = styles.getPropertyValue(key);
+      }
+    }
+    let src = element.src || '';
+    const imgChild = element.querySelector(':scope > img');
+    const hasImgChild = !!imgChild;
+    if (!src && imgChild) {
+      src = imgChild.src || '';
+    }
+    // Compute a data URL for cross-origin image access. The host page cannot
+    // fetch image URLs from the sandboxed iframe origin due to CORS. By
+    // converting via canvas here (where we have same-origin access), the host
+    // can use srcDataUrl directly for image regeneration.
+    let srcDataUrl = '';
+    if (src && !src.startsWith('data:')) {
+      try {
+        const imgEl = element.tagName.toLowerCase() === 'img' ? element : imgChild;
+        if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
+          const canvas = document.createElement('canvas');
+          canvas.width = imgEl.naturalWidth;
+          canvas.height = imgEl.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(imgEl, 0, 0);
+          srcDataUrl = canvas.toDataURL('image/png');
+        }
+      } catch (e) {
+        // If canvas conversion fails (e.g. tainted canvas), leave empty.
+      }
+    } else if (src.startsWith('data:')) {
+      srcDataUrl = src;
+    }
+    const rect = element.getBoundingClientRect();
+    const tagName = element.tagName.toLowerCase();
+    return { selector, domString, css: activeElementCss, src, srcDataUrl, hasImgChild, x: rect.left, y: rect.top, width: rect.width, height: rect.height, tagHeight: focusTag ? focusTag.offsetHeight : 0, alt: element.alt || '', tagName };
+  }
+
+  const style = document.createElement('style');
+  style.textContent =
+    '.aistudio-hover-highlight { box-shadow: inset 0 0 0 0.5px white, inset 0 0 0 1.5px rgba(128,128,128,0.6) !important; }' +
+    '.aistudio-active-highlight { outline: 2px solid #87a9ff !important; outline-offset: -2px !important; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3), inset 0 0 0 0.5px rgba(0,0,0,0.3) !important; border-radius: inherit !important; }' +
+    '.aistudio-generating-blur { filter: blur(5px) grayscale(100%) brightness(28%) !important; transition: filter 0.3s ease; }' +
+    '#aistudio-focus-mode-tag { position: absolute; display: none; align-items: center; gap: 4px; background: #87a9ff; border-radius: 12px; z-index: 10000; padding: 8px; color: #32302c; font-family: Inter, sans-serif; font-size: 14px; font-style: normal; font-weight: 500; line-height: 21px; pointer-events: none; }' +
+    '#aistudio-hover-mode-tag { position: absolute; display: none; align-items: center; gap: 4px; background: rgba(128,128,128,0.6); border-radius: 12px; z-index: 10000; padding: 8px; color: white; font-family: Inter, sans-serif; font-size: 14px; font-style: normal; font-weight: 500; line-height: 21px; pointer-events: none; }' +
+    '.aistudio-img-icon { display: none; vertical-align: middle; pointer-events: auto; cursor: pointer; }' +
+    '.aistudio-img-icon.visible { display: inline-flex; }' +
+    '#aistudio-focus-mode-tag .aistudio-img-icon { position: relative; width: 26px; height: 26px; background: #32302c; border-radius: 6px; margin: -4px -4px -4px 0; }' +
+    '#aistudio-focus-mode-tag .aistudio-img-icon::before { content: ""; position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; background-color: white; -webkit-mask-image: url("https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/edit_fix_auto/default/24px.svg"); -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; mask-image: url("https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/edit_fix_auto/default/24px.svg"); mask-size: contain; mask-repeat: no-repeat; }' +
+    '#aistudio-hover-mode-tag .aistudio-img-icon { position: relative; width: 18px; height: 18px; margin-left: 4px; }' +
+    '#aistudio-hover-mode-tag .aistudio-img-icon::before { content: ""; position: absolute; top: 0; left: 0; width: 18px; height: 18px; background-color: white; -webkit-mask-image: url("https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/edit_fix_auto/default/24px.svg"); -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; mask-image: url("https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/edit_fix_auto/default/24px.svg"); mask-size: contain; mask-repeat: no-repeat; }' +
+    '#aistudio-focus-mode-tag .aistudio-img-icon:hover, #aistudio-hover-mode-tag .aistudio-img-icon:hover { background: #424242 !important; }' +
+    '#aistudio-focus-mode-tag .aistudio-img-icon:active, #aistudio-hover-mode-tag .aistudio-img-icon:active { background: #393f51 !important; }';
+  document.head.appendChild(style);
+
+  let hoveredElement = null;
+  let activeElement = null;
+  let focusTag = null;
+  let hoverTag = null;
+  let resizeObserver = null;
+  let iframeLoaded = false;
+  let designModeEnabled = false;
+  let designModeStyle = null;
+  let designModeOverlay = null;
+  let generatingElement = null;
+
+  function createImgIcon() {
+    const icon = document.createElement('span');
+    icon.className = 'aistudio-img-icon';
+    icon.setAttribute('aria-label', 'Regenerate image');
+    icon.setAttribute('title', 'Regenerate image');
+    icon.setAttribute('role', 'button');
+    return icon;
+  }
+
+  function updateTagContent(tag, element) {
+    let label = tag.querySelector('.aistudio-tag-label');
+    if (label) {
+      label.textContent = getTagLabel(element);
+    } else {
+      label = document.createElement('span');
+      label.className = 'aistudio-tag-label';
+      label.textContent = getTagLabel(element);
+      tag.insertBefore(label, tag.firstChild);
+    }
+    const imgIcon = tag.querySelector('.aistudio-img-icon');
+    if (imgIcon) {
+      imgIcon.classList.toggle('visible',
+          (element.tagName.toLowerCase() === 'img' || element.querySelector(':scope > img')));
+    }
+  }
+
+  function getTagLabel(element) {
+    const tagName = element.tagName.toLowerCase()
+    if (tagName == 'img') {
+      return 'Image';
+    }
+    return tagName;
+  }
+
+  function createModeTag(id, isHoverMode) {
+    const tag = document.createElement('div');
+    tag.id = id;
+    const icon = createImgIcon();
+    icon.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const element = isHoverMode ? hoveredElement : activeElement;
+      if (element) {
+        if (isHoverMode && element !== activeElement) {
+          setActiveElement(element);
+        }
+        const info = getElementInfo(element);
+        window.parent.postMessage({
+          type: 'open-image-regenerator',
+          element: info,
+        }, '*');
+      }
+    });
+    tag.appendChild(icon);
+    document.body.appendChild(tag);
+    return tag;
+  }
+
+  function ensureFocusTag() {
+    if (!focusTag) {
+      focusTag = createModeTag('aistudio-focus-mode-tag', false);
+    }
+  }
+
+  function cleanupActiveElement() {
+    if (!activeElement) return;
+    activeElement.classList.remove('aistudio-active-highlight');
+    activeElement.removeAttribute('data-aistudio-tag-name');
+    if (resizeObserver) {
+      resizeObserver.unobserve(activeElement);
+    }
+    window.removeEventListener('resize', positionFocusTag);
+    window.removeEventListener('scroll', onScroll, true);
+  }
+
+  function positionTag(tag, element) {
+    if (!element || !tag) return;
+    tag.style.display = 'inline-flex';
+    const height = tag.offsetHeight;
+    const rect = element.getBoundingClientRect();
+    tag.style.top = (rect.top + window.scrollY - height - 3) + 'px';
+    tag.style.left = (rect.left + window.scrollX) + 'px';
+  }
+
+  function positionFocusTag() {
+    requestAnimationFrame(() => {
+      positionTag(focusTag, activeElement);
+    });
+  }
+
+  let scrollScheduled = false;
+
+  function onScroll() {
+    positionFocusTag();
+    if ((activeElement || generatingElement) && !scrollScheduled) {
+      scrollScheduled = true;
+      requestAnimationFrame(() => {
+        if (activeElement) {
+          const info = getElementInfo(activeElement, true);
+          window.parent.postMessage({
+            type: 'element-selected',
+            element: info,
+          }, '*');
+        }
+        if (generatingElement && generatingElement !== activeElement) {
+          const info = getElementInfo(generatingElement, true);
+          window.parent.postMessage({
+            type: 'generating-element-moved',
+            element: info,
+          }, '*');
+        }
+        scrollScheduled = false;
+      });
+    }
+  }
+
+  function positionHoverTag() {
+    if (!hoveredElement || !hoverTag || hoveredElement === activeElement) {
+      if (hoverTag) hoverTag.style.display = 'none';
+      return;
+    }
+    requestAnimationFrame(() => {
+      positionTag(hoverTag, hoveredElement);
+    });
+  }
+
+  if (window.ResizeObserver) {
+    resizeObserver = new ResizeObserver(() => {
+      positionFocusTag();
+    });
+  }
+
+  function ensureHoverTag() {
+    if (!hoverTag) {
+      hoverTag = createModeTag('aistudio-hover-mode-tag', true);
+    }
+  }
+
+  function setHoveredElement(element) {
+    if (!designModeEnabled || !iframeLoaded) return;
+
+    ensureHoverTag();
+
+    if (hoveredElement && hoveredElement !== activeElement) {
+      hoveredElement.classList.remove('aistudio-hover-highlight');
+    }
+    hoverTag.style.display = 'none';
+
+    hoveredElement = element;
+
+    if (hoveredElement && hoveredElement !== activeElement) {
+      hoveredElement.classList.add('aistudio-hover-highlight');
+      updateTagContent(hoverTag, hoveredElement);
+      positionHoverTag();
+    }
+  }
+
+  async function setActiveElement(element, notifyHost = true) {
+    if (!designModeEnabled || !iframeLoaded) return;
+
+    if (activeElement === element) {
+      return;
+    }
+
+    ensureFocusTag();
+    cleanupActiveElement();
+    focusTag.style.display = 'none';
+    if (hoverTag) {
+      hoverTag.style.display = 'none';
+    }
+
+    if (element) {
+      element.classList.remove('aistudio-hover-highlight');
+    }
+
+    activeElement = element;
+
+    if (activeElement) {
+      activeElement.setAttribute('data-aistudio-tag-name', activeElement.tagName);
+      activeElement.classList.add('aistudio-active-highlight');
+      updateTagContent(focusTag, activeElement);
+
+      positionFocusTag();
+      if (resizeObserver) {
+        resizeObserver.observe(activeElement);
+      }
+      window.addEventListener('resize', positionFocusTag);
+      window.addEventListener('scroll', onScroll, true);
+
+      if (notifyHost) {
+        const info = getElementInfo(activeElement);
+        window.parent.postMessage({
+          type: 'element-selected',
+          element: info,
+        }, '*');
+      }
+    }
+  }
+
+  function getElementAtPoint(x, y) {
+    const elements = document.elementsFromPoint(x, y);
+    let fallback = null;
+    let imgAtPoint = null;
+    for (const el of elements) {
+      if (el.id === 'aistudio-focus-mode-tag' ||
+          el.id === 'aistudio-hover-mode-tag' ||
+          el.id === 'aistudio-design-mode-overlay') {
+        continue;
+      }
+      if (!imgAtPoint && el.tagName.toLowerCase() === 'img') {
+        imgAtPoint = el;
+      }
+      if (!fallback) {
+        fallback = el;
+      }
+    }
+    if (imgAtPoint && fallback && fallback !== imgAtPoint &&
+        !fallback.textContent.trim()) {
+      return imgAtPoint;
+    }
+    return fallback;
+  }
+
+  function isPointInRect(x, y, rect) {
+    return x >= rect.left && x <= rect.right &&
+           y >= rect.top && y <= rect.bottom;
+  }
+
+  function getIconTargetElement(e) {
+    const focusImgIcon = focusTag?.querySelector('.aistudio-img-icon.visible');
+    const hoverImgIcon = hoverTag?.querySelector('.aistudio-img-icon.visible');
+
+    if (focusImgIcon && isPointInRect(e.clientX, e.clientY, focusImgIcon.getBoundingClientRect())) {
+      return activeElement;
+    }
+    if (hoverImgIcon && isPointInRect(e.clientX, e.clientY, hoverImgIcon.getBoundingClientRect())) {
+      return hoveredElement;
+    }
+
+    return null;
+  }
+
+  function onMouseMove(e) {
+    if (!designModeEnabled) return;
+    const target = getIconTargetElement(e);
+    if (target) {
+      if (target !== hoveredElement) {
+        setHoveredElement(null);
+      }
+      return;
+    }
+
+    if (hoverTag && hoverTag.style.display !== 'none') {
+      const rect = hoverTag.getBoundingClientRect();
+      // Add 5px tolerance at the bottom to bridge the gap to the element
+      if (e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom + 5) {
+        return;
+      }
+    }
+
+    const element = getElementAtPoint(e.clientX, e.clientY);
+    setHoveredElement(element);
+  }
+
+  function onClick(e) {
+    if (!designModeEnabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const element = getElementAtPoint(e.clientX, e.clientY);
+    if (element && element !== document.body) {
+      setActiveElement(element);
+    }
+  }
+
+  function onKeyDown(e) {
+    if (!designModeEnabled) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      const element = document.activeElement;
+      if (element && element !== document.body) {
+        setActiveElement(element);
+      }
+    }
+  }
+
+  function enableDesignMode() {
+    if (designModeEnabled) return;
+    designModeEnabled = true;
+    designModeStyle = document.createElement('style');
+    designModeStyle.textContent =
+      'button:disabled, input:disabled, select:disabled, textarea:disabled, ' +
+      '[disabled], [aria-disabled="true"] { pointer-events: auto !important; }';
+    document.head.appendChild(designModeStyle);
+    designModeOverlay = document.createElement('div');
+    designModeOverlay.id = 'aistudio-design-mode-overlay';
+    designModeOverlay.style.cssText =
+      'position: fixed; top: 0; left: 0; width: 100%; height: 100%; ' +
+      'z-index: 9999; cursor: default; background: transparent;';
+    designModeOverlay.addEventListener('mousemove', onMouseMove);
+    designModeOverlay.addEventListener('mousedown', onClick);
+    designModeOverlay.addEventListener('keydown', onKeyDown);
+    document.body.appendChild(designModeOverlay);
+  }
+
+  function disableDesignMode() {
+    if (!designModeEnabled) return;
+    if (designModeOverlay) {
+      designModeOverlay.removeEventListener('mousemove', onMouseMove);
+      designModeOverlay.removeEventListener('mousedown', onClick);
+      designModeOverlay.removeEventListener('keydown', onKeyDown);
+      designModeOverlay.remove();
+      designModeOverlay = null;
+    }
+    setHoveredElement(null);
+    clearActiveElement();
+    if (designModeStyle) {
+      designModeStyle.remove();
+      designModeStyle = null;
+    }
+    designModeEnabled = false;
+  }
+
+  function clearActiveElement() {
+    ensureFocusTag();
+    cleanupActiveElement();
+    focusTag.style.display = 'none';
+    activeElement = null;
+  }
+
+  function getPageHtml() {
+    const clonedDoc = document.documentElement.cloneNode(true);
+    let cssText = '';
+    for (const sheet of document.styleSheets) {
+      try {
+        const rules = sheet.cssRules || sheet.rules;
+        for (const rule of rules) {
+          cssText += rule.cssText + '\n';
+        }
+      } catch (e) {
+        console.warn("CORS issue reading stylesheet: ", sheet.href);
+      }
+    }
+    const styleTag = document.createElement('style');
+    styleTag.textContent = cssText;
+    const clonedHead = clonedDoc.querySelector('head');
+    if (clonedHead) {
+      clonedHead.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.remove());
+      clonedHead.appendChild(styleTag);
+    }
+    clonedDoc.querySelectorAll('script').forEach(el => el.remove());
+    return '<!DOCTYPE html>\n' + clonedDoc.outerHTML;
+  }
+
+  window.addEventListener('load', () => {
+    iframeLoaded = true;
+  });
+
+  window.addEventListener('message', async (event) => {
+    switch (event.data?.type) {
+      case 'set-design-mode':
+        if (event.data.enabled) {
+          enableDesignMode();
+        } else {
+          disableDesignMode();
+        }
+        break;
+
+      case 'highlight-element-by-selector':
+        try {
+          const selector = event.data.selector;
+          if (selector) {
+            const element = document.querySelector(selector);
+            setActiveElement(element, /* notifyHost= */ false);
+          } else {
+            setActiveElement(null, /* notifyHost= */ false);
+          }
+        } catch (e) {
+          setActiveElement(null, /* notifyHost= */ false);
+        }
+        break;
+
+      case 'toggle-generating-state':
+        try {
+          const selector = event.data.selector;
+          if (selector) {
+            const element = document.querySelector(selector);
+            if (element) {
+              console.log('Toggling generating state for ', selector, event.data.enabled);
+              if (event.data.enabled) {
+                element.classList.add('aistudio-generating-blur');
+                generatingElement = element;
+              } else {
+                element.style.transition = 'filter 0.3s ease';
+                element.classList.remove('aistudio-generating-blur');
+                generatingElement = null;
+                setTimeout(() => {
+                  element.style.transition = '';
+                }, 300);
+              }
+            }
+          }
+        } catch (e) {}
+        break;
+
+      case 'change-element-style':
+        try {
+          const selector = event.data.selector;
+          if (selector) {
+            const element = document.querySelector(selector);
+            if (element) {
+              element.style.setProperty(
+                event.data.property,
+                event.data.value,
+                'important',
+              );
+              positionFocusTag();
+            }
+          }
+        } catch (e) {}
+        break;
+
+      case 'image-generated':
+        try {
+          const selector = event.data.selector;
+          const dataUrl = event.data.dataUrl;
+          if (selector && dataUrl) {
+            const element = document.querySelector(selector);
+            if (element) {
+              const updateImg = (img) => {
+                const originalTransition = img.style.transition;
+                const originalOpacity = img.style.opacity;
+                img.style.transition = 'opacity 0.15s ease';
+                img.style.opacity = '0.3';
+                setTimeout(() => {
+                  img.srcset = '';
+                  img.src = dataUrl;
+                  setTimeout(() => {
+                    img.style.opacity = originalOpacity || '1';
+                    setTimeout(() => {
+                      img.style.transition = originalTransition;
+                    }, 150);
+                  }, 50);
+                }, 150);
+              };
+
+              if (element.tagName.toLowerCase() === 'img') {
+                updateImg(element);
+              } else {
+                const imgChild = element.querySelector(':scope > img');
+                if (imgChild) {
+                  updateImg(imgChild);
+                }
+              }
+            }
+          }
+        } catch (e) {}
+        break;
+
+      case 'get-page-html':
+        try {
+          const finalHTML = getPageHtml();
+
+          const hostPort = (await bootstrapChannel).port;
+          hostPort.postMessage({
+            type: 'page-html-result',
+            html: finalHTML,
+            requestId: event.data.requestId,
+            width: window.innerWidth
+          });
+        } catch (e) {
+          const hostPort = (await bootstrapChannel).port;
+          hostPort.postMessage({
+            type: 'page-html-error',
+            error: e.message,
+            requestId: event.data.requestId
+          });
+        }
+        break;
+
+      case 'apply-theme':
+        try {
+          const theme = event.data.theme;
+          if (theme) {
+            const rootStyle = document.documentElement.style;
+            for (const [key, value] of Object.entries(theme)) {
+              rootStyle.setProperty(key, value);
+            }
+          }
+          const darkTheme = event.data.darkTheme;
+          if (darkTheme) {
+            let styleTag = document.getElementById('dynamic-dark-theme');
+            if (!styleTag) {
+              styleTag = document.createElement('style');
+              styleTag.id = 'dynamic-dark-theme';
+              document.head.appendChild(styleTag);
+            }
+            const cssRules = Object.entries(darkTheme)
+              .map(([key, value]) => `${key}: ${value};`)
+              .join('\n');
+            styleTag.textContent = `.dark {\n${cssRules}\n}`;
+          }
+        } catch (e) {}
+        break;
+    }
+  });
+
+  window.addEventListener('keydown', async (event) => {
+    if (event.key === 'Escape' && window.aistudio?.handleFullscreenEsc) {
+      const hostPort = (await bootstrapChannel).port;
+      hostPort.postMessage({type: 'exit-fullscreen'});
+    }
+  });
+})();
+</script><style type="text/css" data-vite-dev-id="/app/applet/src/index.css">/*! tailwindcss v4.3.0 | MIT License | https://tailwindcss.com */
+@layer properties;
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+    --color-amber-50: oklch(98.7% 0.022 95.277);
+    --color-amber-600: oklch(66.6% 0.179 58.318);
+    --color-emerald-50: oklch(97.9% 0.021 166.113);
+    --color-emerald-100: oklch(95% 0.052 163.051);
+    --color-emerald-200: oklch(90.5% 0.093 164.15);
+    --color-emerald-300: oklch(84.5% 0.143 164.978);
+    --color-emerald-400: oklch(76.5% 0.177 163.223);
+    --color-emerald-500: oklch(69.6% 0.17 162.48);
+    --color-emerald-600: oklch(59.6% 0.145 163.225);
+    --color-emerald-700: oklch(50.8% 0.118 165.612);
+    --color-emerald-800: oklch(43.2% 0.095 166.913);
+    --color-emerald-900: oklch(37.8% 0.077 168.94);
+    --color-cyan-50: oklch(98.4% 0.019 200.873);
+    --color-cyan-600: oklch(60.9% 0.126 221.723);
+    --color-blue-50: oklch(97% 0.014 254.604);
+    --color-blue-600: oklch(54.6% 0.245 262.881);
+    --color-purple-50: oklch(97.7% 0.014 308.299);
+    --color-purple-600: oklch(55.8% 0.288 302.321);
+    --color-rose-50: oklch(96.9% 0.015 12.422);
+    --color-rose-600: oklch(58.6% 0.253 17.585);
+    --color-slate-50: oklch(98.4% 0.003 247.858);
+    --color-slate-100: oklch(96.8% 0.007 247.896);
+    --color-slate-200: oklch(92.9% 0.013 255.508);
+    --color-slate-300: oklch(86.9% 0.022 252.894);
+    --color-slate-400: oklch(70.4% 0.04 256.788);
+    --color-slate-500: oklch(55.4% 0.046 257.417);
+    --color-slate-600: oklch(44.6% 0.043 257.281);
+    --color-slate-800: oklch(27.9% 0.041 260.031);
+    --color-slate-900: oklch(20.8% 0.042 265.755);
+    --color-white: #fff;
+    --spacing: 0.25rem;
+    --container-7xl: 80rem;
+    --text-xs: 0.75rem;
+    --text-xs--line-height: calc(1 / 0.75);
+    --text-sm: 0.875rem;
+    --text-sm--line-height: calc(1.25 / 0.875);
+    --text-lg: 1.125rem;
+    --text-lg--line-height: calc(1.75 / 1.125);
+    --text-xl: 1.25rem;
+    --text-xl--line-height: calc(1.75 / 1.25);
+    --text-2xl: 1.5rem;
+    --text-2xl--line-height: calc(2 / 1.5);
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-bold: 700;
+    --tracking-wide: 0.025em;
+    --tracking-wider: 0.05em;
+    --tracking-widest: 0.1em;
+    --leading-tight: 1.25;
+    --leading-relaxed: 1.625;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 1rem;
+    --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    --blur-md: 12px;
+    --default-transition-duration: 150ms;
+    --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    --default-font-family: var(--font-sans);
+    --default-mono-font-family: var(--font-mono);
+  }
+}
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+  html, :host {
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    tab-size: 4;
+    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+    font-feature-settings: var(--default-font-feature-settings, normal);
+    font-variation-settings: var(--default-font-variation-settings, normal);
+    -webkit-tap-highlight-color: transparent;
+  }
+  hr {
+    height: 0;
+    color: inherit;
+    border-top-width: 1px;
+  }
+  abbr:where([title]) {
+    -webkit-text-decoration: underline dotted;
+    text-decoration: underline dotted;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+  a {
+    color: inherit;
+    -webkit-text-decoration: inherit;
+    text-decoration: inherit;
+  }
+  b, strong {
+    font-weight: bolder;
+  }
+  code, kbd, samp, pre {
+    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+    font-feature-settings: var(--default-mono-font-feature-settings, normal);
+    font-variation-settings: var(--default-mono-font-variation-settings, normal);
+    font-size: 1em;
+  }
+  small {
+    font-size: 80%;
+  }
+  sub, sup {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+  }
+  sub {
+    bottom: -0.25em;
+  }
+  sup {
+    top: -0.5em;
+  }
+  table {
+    text-indent: 0;
+    border-color: inherit;
+    border-collapse: collapse;
+  }
+  :-moz-focusring {
+    outline: auto;
+  }
+  progress {
+    vertical-align: baseline;
+  }
+  summary {
+    display: list-item;
+  }
+  ol, ul, menu {
+    list-style: none;
+  }
+  img, svg, video, canvas, audio, iframe, embed, object {
+    display: block;
+    vertical-align: middle;
+  }
+  img, video {
+    max-width: 100%;
+    height: auto;
+  }
+  button, input, select, optgroup, textarea, ::file-selector-button {
+    font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    border-radius: 0;
+    background-color: transparent;
+    opacity: 1;
+  }
+  :where(select:is([multiple], [size])) optgroup {
+    font-weight: bolder;
+  }
+  :where(select:is([multiple], [size])) optgroup option {
+    padding-inline-start: 20px;
+  }
+  ::file-selector-button {
+    margin-inline-end: 4px;
+  }
+  ::placeholder {
+    opacity: 1;
+  }
+  @supports (not (-webkit-appearance: -apple-pay-button))  or (contain-intrinsic-size: 1px) {
+    ::placeholder {
+      color: currentcolor;
+      @supports (color: color-mix(in lab, red, red)) {
+        color: color-mix(in oklab, currentcolor 50%, transparent);
+      }
+    }
+  }
+  textarea {
+    resize: vertical;
+  }
+  ::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+  ::-webkit-date-and-time-value {
+    min-height: 1lh;
+    text-align: inherit;
+  }
+  ::-webkit-datetime-edit {
+    display: inline-flex;
+  }
+  ::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+  ::-webkit-datetime-edit, ::-webkit-datetime-edit-year-field, ::-webkit-datetime-edit-month-field, ::-webkit-datetime-edit-day-field, ::-webkit-datetime-edit-hour-field, ::-webkit-datetime-edit-minute-field, ::-webkit-datetime-edit-second-field, ::-webkit-datetime-edit-millisecond-field, ::-webkit-datetime-edit-meridiem-field {
+    padding-block: 0;
+  }
+  ::-webkit-calendar-picker-indicator {
+    line-height: 1;
+  }
+  :-moz-ui-invalid {
+    box-shadow: none;
+  }
+  button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-selector-button {
+    appearance: button;
+  }
+  ::-webkit-inner-spin-button, ::-webkit-outer-spin-button {
+    height: auto;
+  }
+  [hidden]:where(:not([hidden="until-found"])) {
+    display: none !important;
+  }
+}
+@layer utilities {
+  .absolute {
+    position: absolute;
+  }
+  .relative {
+    position: relative;
+  }
+  .sticky {
+    position: sticky;
+  }
+  .top-0 {
+    top: calc(var(--spacing) * 0);
+  }
+  .right-0 {
+    right: calc(var(--spacing) * 0);
+  }
+  .z-10 {
+    z-index: 10;
+  }
+  .z-20 {
+    z-index: 20;
+  }
+  .mx-auto {
+    margin-inline: auto;
+  }
+  .mt-8 {
+    margin-top: calc(var(--spacing) * 8);
+  }
+  .mt-auto {
+    margin-top: auto;
+  }
+  .mb-1 {
+    margin-bottom: calc(var(--spacing) * 1);
+  }
+  .mb-2 {
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .mb-4 {
+    margin-bottom: calc(var(--spacing) * 4);
+  }
+  .mb-8 {
+    margin-bottom: calc(var(--spacing) * 8);
+  }
+  .mb-10 {
+    margin-bottom: calc(var(--spacing) * 10);
+  }
+  .block {
+    display: block;
+  }
+  .flex {
+    display: flex;
+  }
+  .grid {
+    display: grid;
+  }
+  .hidden {
+    display: none;
+  }
+  .h-2 {
+    height: calc(var(--spacing) * 2);
+  }
+  .h-4 {
+    height: calc(var(--spacing) * 4);
+  }
+  .h-5 {
+    height: calc(var(--spacing) * 5);
+  }
+  .h-6 {
+    height: calc(var(--spacing) * 6);
+  }
+  .h-10 {
+    height: calc(var(--spacing) * 10);
+  }
+  .h-12 {
+    height: calc(var(--spacing) * 12);
+  }
+  .h-full {
+    height: 100%;
+  }
+  .h-screen {
+    height: 100vh;
+  }
+  .min-h-24 {
+    min-height: calc(var(--spacing) * 24);
+  }
+  .w-2 {
+    width: calc(var(--spacing) * 2);
+  }
+  .w-4 {
+    width: calc(var(--spacing) * 4);
+  }
+  .w-5 {
+    width: calc(var(--spacing) * 5);
+  }
+  .w-6 {
+    width: calc(var(--spacing) * 6);
+  }
+  .w-10 {
+    width: calc(var(--spacing) * 10);
+  }
+  .w-72 {
+    width: calc(var(--spacing) * 72);
+  }
+  .w-full {
+    width: 100%;
+  }
+  .max-w-7xl {
+    max-width: var(--container-7xl);
+  }
+  .flex-1 {
+    flex: 1;
+  }
+  .flex-shrink-0 {
+    flex-shrink: 0;
+  }
+  .shrink-0 {
+    flex-shrink: 0;
+  }
+  .-translate-x-2 {
+    --tw-translate-x: calc(var(--spacing) * -2);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+  .animate-pulse {
+    animation: var(--animate-pulse);
+  }
+  .scroll-mt-32 {
+    scroll-margin-top: calc(var(--spacing) * 32);
+  }
+  .grid-cols-1 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+  .flex-col {
+    flex-direction: column;
+  }
+  .items-center {
+    align-items: center;
+  }
+  .items-start {
+    align-items: flex-start;
+  }
+  .justify-between {
+    justify-content: space-between;
+  }
+  .justify-center {
+    justify-content: center;
+  }
+  .gap-2 {
+    gap: calc(var(--spacing) * 2);
+  }
+  .gap-3 {
+    gap: calc(var(--spacing) * 3);
+  }
+  .gap-4 {
+    gap: calc(var(--spacing) * 4);
+  }
+  .gap-6 {
+    gap: calc(var(--spacing) * 6);
+  }
+  .space-y-2 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .space-y-16 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 16) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 16) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .overflow-hidden {
+    overflow: hidden;
+  }
+  .overflow-y-auto {
+    overflow-y: auto;
+  }
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+  .rounded {
+    border-radius: 0.25rem;
+  }
+  .rounded-2xl {
+    border-radius: var(--radius-2xl);
+  }
+  .rounded-full {
+    border-radius: calc(infinity * 1px);
+  }
+  .rounded-lg {
+    border-radius: var(--radius-lg);
+  }
+  .rounded-xl {
+    border-radius: var(--radius-xl);
+  }
+  .border {
+    border-style: var(--tw-border-style);
+    border-width: 1px;
+  }
+  .border-t {
+    border-top-style: var(--tw-border-style);
+    border-top-width: 1px;
+  }
+  .border-b {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 1px;
+  }
+  .border-emerald-100 {
+    border-color: var(--color-emerald-100);
+  }
+  .border-emerald-800\/50 {
+    border-color: color-mix(in srgb, oklch(43.2% 0.095 166.913) 50%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-emerald-800) 50%, transparent);
+    }
+  }
+  .border-slate-200 {
+    border-color: var(--color-slate-200);
+  }
+  .bg-amber-50 {
+    background-color: var(--color-amber-50);
+  }
+  .bg-blue-50 {
+    background-color: var(--color-blue-50);
+  }
+  .bg-cyan-50 {
+    background-color: var(--color-cyan-50);
+  }
+  .bg-emerald-50 {
+    background-color: var(--color-emerald-50);
+  }
+  .bg-emerald-500 {
+    background-color: var(--color-emerald-500);
+  }
+  .bg-emerald-800\/40 {
+    background-color: color-mix(in srgb, oklch(43.2% 0.095 166.913) 40%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-emerald-800) 40%, transparent);
+    }
+  }
+  .bg-emerald-900 {
+    background-color: var(--color-emerald-900);
+  }
+  .bg-purple-50 {
+    background-color: var(--color-purple-50);
+  }
+  .bg-rose-50 {
+    background-color: var(--color-rose-50);
+  }
+  .bg-slate-50 {
+    background-color: var(--color-slate-50);
+  }
+  .bg-slate-100 {
+    background-color: var(--color-slate-100);
+  }
+  .bg-white {
+    background-color: var(--color-white);
+  }
+  .bg-white\/95 {
+    background-color: color-mix(in srgb, #fff 95%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-white) 95%, transparent);
+    }
+  }
+  .p-2 {
+    padding: calc(var(--spacing) * 2);
+  }
+  .p-4 {
+    padding: calc(var(--spacing) * 4);
+  }
+  .p-6 {
+    padding: calc(var(--spacing) * 6);
+  }
+  .p-8 {
+    padding: calc(var(--spacing) * 8);
+  }
+  .px-2 {
+    padding-inline: calc(var(--spacing) * 2);
+  }
+  .px-4 {
+    padding-inline: calc(var(--spacing) * 4);
+  }
+  .px-6 {
+    padding-inline: calc(var(--spacing) * 6);
+  }
+  .py-1 {
+    padding-block: calc(var(--spacing) * 1);
+  }
+  .py-2 {
+    padding-block: calc(var(--spacing) * 2);
+  }
+  .py-3 {
+    padding-block: calc(var(--spacing) * 3);
+  }
+  .py-4 {
+    padding-block: calc(var(--spacing) * 4);
+  }
+  .pr-6 {
+    padding-right: calc(var(--spacing) * 6);
+  }
+  .pb-4 {
+    padding-bottom: calc(var(--spacing) * 4);
+  }
+  .text-left {
+    text-align: left;
+  }
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+  .font-sans {
+    font-family: var(--font-sans);
+  }
+  .text-2xl {
+    font-size: var(--text-2xl);
+    line-height: var(--tw-leading, var(--text-2xl--line-height));
+  }
+  .text-lg {
+    font-size: var(--text-lg);
+    line-height: var(--tw-leading, var(--text-lg--line-height));
+  }
+  .text-sm {
+    font-size: var(--text-sm);
+    line-height: var(--tw-leading, var(--text-sm--line-height));
+  }
+  .text-xl {
+    font-size: var(--text-xl);
+    line-height: var(--tw-leading, var(--text-xl--line-height));
+  }
+  .text-xs {
+    font-size: var(--text-xs);
+    line-height: var(--tw-leading, var(--text-xs--line-height));
+  }
+  .text-\[10px\] {
+    font-size: 10px;
+  }
+  .leading-relaxed {
+    --tw-leading: var(--leading-relaxed);
+    line-height: var(--leading-relaxed);
+  }
+  .leading-tight {
+    --tw-leading: var(--leading-tight);
+    line-height: var(--leading-tight);
+  }
+  .font-bold {
+    --tw-font-weight: var(--font-weight-bold);
+    font-weight: var(--font-weight-bold);
+  }
+  .font-medium {
+    --tw-font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-medium);
+  }
+  .font-normal {
+    --tw-font-weight: var(--font-weight-normal);
+    font-weight: var(--font-weight-normal);
+  }
+  .tracking-wide {
+    --tw-tracking: var(--tracking-wide);
+    letter-spacing: var(--tracking-wide);
+  }
+  .tracking-wider {
+    --tw-tracking: var(--tracking-wider);
+    letter-spacing: var(--tracking-wider);
+  }
+  .tracking-widest {
+    --tw-tracking: var(--tracking-widest);
+    letter-spacing: var(--tracking-widest);
+  }
+  .text-amber-600 {
+    color: var(--color-amber-600);
+  }
+  .text-blue-600 {
+    color: var(--color-blue-600);
+  }
+  .text-cyan-600 {
+    color: var(--color-cyan-600);
+  }
+  .text-emerald-50\/80 {
+    color: color-mix(in srgb, oklch(97.9% 0.021 166.113) 80%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-emerald-50) 80%, transparent);
+    }
+  }
+  .text-emerald-100\/60 {
+    color: color-mix(in srgb, oklch(95% 0.052 163.051) 60%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-emerald-100) 60%, transparent);
+    }
+  }
+  .text-emerald-200 {
+    color: var(--color-emerald-200);
+  }
+  .text-emerald-300 {
+    color: var(--color-emerald-300);
+  }
+  .text-emerald-400 {
+    color: var(--color-emerald-400);
+  }
+  .text-emerald-500 {
+    color: var(--color-emerald-500);
+  }
+  .text-emerald-600 {
+    color: var(--color-emerald-600);
+  }
+  .text-emerald-700 {
+    color: var(--color-emerald-700);
+  }
+  .text-emerald-900 {
+    color: var(--color-emerald-900);
+  }
+  .text-purple-600 {
+    color: var(--color-purple-600);
+  }
+  .text-rose-600 {
+    color: var(--color-rose-600);
+  }
+  .text-slate-300 {
+    color: var(--color-slate-300);
+  }
+  .text-slate-400 {
+    color: var(--color-slate-400);
+  }
+  .text-slate-500 {
+    color: var(--color-slate-500);
+  }
+  .text-slate-600 {
+    color: var(--color-slate-600);
+  }
+  .text-slate-800 {
+    color: var(--color-slate-800);
+  }
+  .text-slate-900 {
+    color: var(--color-slate-900);
+  }
+  .text-white {
+    color: var(--color-white);
+  }
+  .uppercase {
+    text-transform: uppercase;
+  }
+  .italic {
+    font-style: italic;
+  }
+  .opacity-0 {
+    opacity: 0%;
+  }
+  .shadow-sm {
+    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+  .backdrop-blur-md {
+    --tw-backdrop-blur: blur(var(--blur-md));
+    -webkit-backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
+    backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
+  }
+  .transition {
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
+  .transition-all {
+    transition-property: all;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
+  .transition-colors {
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
+  .group-hover\:translate-x-0 {
+    &:is(:where(.group):hover *) {
+      @media (hover: hover) {
+        --tw-translate-x: calc(var(--spacing) * 0);
+        translate: var(--tw-translate-x) var(--tw-translate-y);
+      }
+    }
+  }
+  .group-hover\:bg-emerald-100\/50 {
+    &:is(:where(.group):hover *) {
+      @media (hover: hover) {
+        background-color: color-mix(in srgb, oklch(95% 0.052 163.051) 50%, transparent);
+        @supports (color: color-mix(in lab, red, red)) {
+          background-color: color-mix(in oklab, var(--color-emerald-100) 50%, transparent);
+        }
+      }
+    }
+  }
+  .group-hover\:text-emerald-700 {
+    &:is(:where(.group):hover *) {
+      @media (hover: hover) {
+        color: var(--color-emerald-700);
+      }
+    }
+  }
+  .group-hover\:opacity-100 {
+    &:is(:where(.group):hover *) {
+      @media (hover: hover) {
+        opacity: 100%;
+      }
+    }
+  }
+  .hover\:bg-white\/5 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: color-mix(in srgb, #fff 5%, transparent);
+        @supports (color: color-mix(in lab, red, red)) {
+          background-color: color-mix(in oklab, var(--color-white) 5%, transparent);
+        }
+      }
+    }
+  }
+  .hover\:text-white {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-white);
+      }
+    }
+  }
+  .hover\:shadow-md {
+    &:hover {
+      @media (hover: hover) {
+        --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 2px 4px -2px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+        box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+      }
+    }
+  }
+  .sm\:inline {
+    @media (width >= 40rem) {
+      display: inline;
+    }
+  }
+  .sm\:flex-row {
+    @media (width >= 40rem) {
+      flex-direction: row;
+    }
+  }
+  .sm\:items-center {
+    @media (width >= 40rem) {
+      align-items: center;
+    }
+  }
+  .md\:flex {
+    @media (width >= 48rem) {
+      display: flex;
+    }
+  }
+  .md\:grid-cols-2 {
+    @media (width >= 48rem) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  .md\:p-10 {
+    @media (width >= 48rem) {
+      padding: calc(var(--spacing) * 10);
+    }
+  }
+  .md\:px-10 {
+    @media (width >= 48rem) {
+      padding-inline: calc(var(--spacing) * 10);
+    }
+  }
+  .lg\:grid-cols-2 {
+    @media (width >= 64rem) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  .xl\:grid-cols-3 {
+    @media (width >= 80rem) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+}
+@property --tw-translate-x {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-translate-y {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-translate-z {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-space-y-reverse {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-border-style {
+  syntax: "*";
+  inherits: false;
+  initial-value: solid;
+}
+@property --tw-leading {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-tracking {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --tw-inset-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-inset-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-inset-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --tw-ring-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-ring-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-inset-ring-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-inset-ring-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-ring-inset {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-ring-offset-width {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --tw-ring-offset-color {
+  syntax: "*";
+  inherits: false;
+  initial-value: #fff;
+}
+@property --tw-ring-offset-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-backdrop-blur {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-brightness {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-contrast {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-grayscale {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-hue-rotate {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-invert {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-opacity {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-saturate {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-sepia {
+  syntax: "*";
+  inherits: false;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-translate-x: 0;
+      --tw-translate-y: 0;
+      --tw-translate-z: 0;
+      --tw-space-y-reverse: 0;
+      --tw-border-style: solid;
+      --tw-leading: initial;
+      --tw-font-weight: initial;
+      --tw-tracking: initial;
+      --tw-shadow: 0 0 #0000;
+      --tw-shadow-color: initial;
+      --tw-shadow-alpha: 100%;
+      --tw-inset-shadow: 0 0 #0000;
+      --tw-inset-shadow-color: initial;
+      --tw-inset-shadow-alpha: 100%;
+      --tw-ring-color: initial;
+      --tw-ring-shadow: 0 0 #0000;
+      --tw-inset-ring-color: initial;
+      --tw-inset-ring-shadow: 0 0 #0000;
+      --tw-ring-inset: initial;
+      --tw-ring-offset-width: 0px;
+      --tw-ring-offset-color: #fff;
+      --tw-ring-offset-shadow: 0 0 #0000;
+      --tw-backdrop-blur: initial;
+      --tw-backdrop-brightness: initial;
+      --tw-backdrop-contrast: initial;
+      --tw-backdrop-grayscale: initial;
+      --tw-backdrop-hue-rotate: initial;
+      --tw-backdrop-invert: initial;
+      --tw-backdrop-opacity: initial;
+      --tw-backdrop-saturate: initial;
+      --tw-backdrop-sepia: initial;
+    }
+  }
+}
+</style></head>
+  <body>
+    <div id="root"><div class="flex h-screen w-full bg-slate-50 font-sans text-slate-800 overflow-hidden"><aside class="w-72 bg-emerald-900 hidden md:flex flex-col shrink-0 overflow-y-auto"><div class="p-8"><div class="flex items-center gap-3 mb-10"><div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-emerald-900 font-bold text-xl shrink-0">PK</div><h1 class="text-white font-bold leading-tight text-lg">PAKISTAN<br><span class="font-normal text-emerald-300 text-xs tracking-widest uppercase">Reference Portal</span></h1></div><nav class="space-y-2"><button class="w-full flex items-center gap-3 px-4 py-3 text-emerald-100/60 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors text-left"><div class="text-emerald-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open w-5 h-5" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg></div><span>Geral</span></button><button class="w-full flex items-center gap-3 px-4 py-3 text-emerald-100/60 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors text-left"><div class="text-emerald-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-landmark w-5 h-5" aria-hidden="true"><path d="M10 18v-7"></path><path d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z"></path><path d="M14 18v-7"></path><path d="M18 18v-7"></path><path d="M3 22h18"></path><path d="M6 18v-7"></path></svg></div><span>Cultura</span></button><button class="w-full flex items-center gap-3 px-4 py-3 text-emerald-100/60 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors text-left"><div class="text-emerald-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-coins w-5 h-5" aria-hidden="true"><circle cx="8" cy="8" r="6"></circle><path d="M18.09 10.37A6 6 0 1 1 10.34 18"></path><path d="M7 6h1v4"></path><path d="m16.71 13.88.7.71-2.82 2.82"></path></svg></div><span>Economia</span></button><button class="w-full flex items-center gap-3 px-4 py-3 text-emerald-100/60 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors text-left"><div class="text-emerald-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mountain w-5 h-5" aria-hidden="true"><path d="m8 3 4 8 5-5 5 15H2L8 3z"></path></svg></div><span>Natureza</span></button><button class="w-full flex items-center gap-3 px-4 py-3 text-emerald-100/60 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors text-left"><div class="text-emerald-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map w-5 h-5" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"></path><path d="M15 5.764v15"></path><path d="M9 3.236v15"></path></svg></div><span>Mapas</span></button></nav></div><div class="mt-auto p-8 border-t border-emerald-800/50"><div class="bg-emerald-800/40 p-4 rounded-xl"><p class="text-xs text-emerald-200 uppercase tracking-wider font-bold mb-1">Project Info</p><p class="text-sm text-emerald-50/80 leading-relaxed">Portal acadêmico consolidado para referências de pesquisa e folder institucional.</p></div></div></aside><main class="flex-1 flex flex-col relative overflow-hidden"><div class="flex-1 overflow-y-auto w-full scroll-smooth"><header class="sticky top-0 z-20 min-h-24 py-4 bg-white/95 backdrop-blur-md border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between px-6 md:px-10 shrink-0 gap-4 shadow-sm relative"><div><h2 class="text-2xl font-bold text-slate-900">Fontes Gerais e Acadêmicas</h2><p class="text-sm text-slate-500">Pesquisa institucional, demografia e dados históricos</p></div><div class="flex items-center gap-4"><div class="px-4 py-2 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-100 uppercase tracking-wide">v1.4 Updated</div></div></header><div class="p-6 md:p-10 space-y-16 max-w-7xl mx-auto"><section id="geral" class="scroll-mt-32"><div class="mb-8 border-b border-slate-200 pb-4"><h2 class="text-2xl font-bold text-slate-900 flex items-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open h-6 w-6 text-emerald-700" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>Fontes Gerais sobre o Paquistão</h2></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6"><a href="https://pt.wikipedia.org/wiki/Paquist%C3%A3o" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded">Fonte 1</span><span class="text-slate-300 font-mono text-xs">01</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Wikipedia — Paquistão<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Fonte geral utilizada para informações históricas, culturais, população, localização e dados gerais do país.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">pt.wikipedia.org/wiki/Paquistão</div></a><a href="https://whc.unesco.org/en/statesparties/pk" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase rounded">Fonte 2</span><span class="text-slate-300 font-mono text-xs">02</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">UNESCO — Patrimônio<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Fonte relacionada aos patrimônios culturais, tradições e locais históricos do Paquistão.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">whc.unesco.org/en/statesparties/pk</div></a><a href="https://data.un.org/en/iso/pk.html" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-bold uppercase rounded">Fonte 3</span><span class="text-slate-300 font-mono text-xs">03</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">United Nations Data<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Dados internacionais sobre população, economia e indicadores sociais do país.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">data.un.org/en/iso/pk.html</div></a><a href="https://www.britannica.com/place/Pakistan" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase rounded">Fonte 4</span><span class="text-slate-300 font-mono text-xs">04</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Encyclopaedia Britannica<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Fonte internacional utilizada para informações geográficas e históricas.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">britannica.com/place/Pakistan</div></a><a href="https://www.cia.gov/the-world-factbook/countries/pakistan/" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-rose-50 text-rose-600 text-[10px] font-bold uppercase rounded">Fonte 5</span><span class="text-slate-300 font-mono text-xs">05</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">CIA World Factbook<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Dados sobre população, economia, idiomas e localização.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">cia.gov/the-world-factbook/countries/pakistan/</div></a><a href="https://www.worldbank.org/en/country/pakistan" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-cyan-50 text-cyan-600 text-[10px] font-bold uppercase rounded">Fonte 6</span><span class="text-slate-300 font-mono text-xs">06</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">World Bank<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Informações econômicas e dados do país.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">worldbank.org/en/country/pakistan</div></a><a href="https://www.pakistan.gov.pk/" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded">Fonte 7</span><span class="text-slate-300 font-mono text-xs">07</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Government of Pakistan<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Portal oficial do governo paquistanês com informações nacionais e institucionais.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">pakistan.gov.pk/</div></a></div></section><section id="cultura" class="scroll-mt-32"><div class="mb-8 border-b border-slate-200 pb-4"><h2 class="text-2xl font-bold text-slate-900 flex items-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-landmark h-6 w-6 text-emerald-700" aria-hidden="true"><path d="M10 18v-7"></path><path d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z"></path><path d="M14 18v-7"></path><path d="M18 18v-7"></path><path d="M3 22h18"></path><path d="M6 18v-7"></path></svg>Fontes sobre Cultura e Costumes</h2></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6"><a href="https://www.nationalgeographic.com/travel/article/pakistan" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded">Fonte 1</span><span class="text-slate-300 font-mono text-xs">01</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">National Geographic<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Informações sobre cultura, paisagens e turismo.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">nationalgeographic.com/travel/article/pakistan</div></a><a href="https://www.britannica.com/place/Pakistan/Cultural-life" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase rounded">Fonte 2</span><span class="text-slate-300 font-mono text-xs">02</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Britannica — Cultura<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Pesquisas sobre religião, tradições, festas e roupas típicas.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">britannica.com/place/Pakistan/Cultural-life</div></a><a href="https://pt.wikipedia.org/wiki/Biryani" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-bold uppercase rounded">Fonte 3</span><span class="text-slate-300 font-mono text-xs">03</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Wikipedia — Biryani<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Fonte usada para informações sobre a culinária típica do país.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">pt.wikipedia.org/wiki/Biryani</div></a><a href="https://www.tourism.gov.pk/" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase rounded">Fonte 4</span><span class="text-slate-300 font-mono text-xs">04</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Tourism Corporation<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Informações culturais, turismo, festivais e tradições do Paquistão.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">tourism.gov.pk/</div></a><a href="https://www.bbc.com/travel/destinations/pakistan" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-rose-50 text-rose-600 text-[10px] font-bold uppercase rounded">Fonte 5</span><span class="text-slate-300 font-mono text-xs">05</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">BBC Travel — Pakistan<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Matérias internacionais sobre cultura, gastronomia e costumes paquistaneses.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">bbc.com/travel/destinations/pakistan</div></a></div></section><section id="economia" class="scroll-mt-32"><div class="mb-8 border-b border-slate-200 pb-4"><h2 class="text-2xl font-bold text-slate-900 flex items-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-coins h-6 w-6 text-emerald-700" aria-hidden="true"><circle cx="8" cy="8" r="6"></circle><path d="M18.09 10.37A6 6 0 1 1 10.34 18"></path><path d="M7 6h1v4"></path><path d="m16.71 13.88.7.71-2.82 2.82"></path></svg>Fontes sobre Economia e Indústria</h2></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6"><a href="https://tradingeconomics.com/pakistan/exports" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded">Fonte 1</span><span class="text-slate-300 font-mono text-xs">01</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Trading Economics<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Informações econômicas e exportações globais.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">tradingeconomics.com/pakistan/exports</div></a><a href="https://www.pbs.gov.pk/" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase rounded">Fonte 2</span><span class="text-slate-300 font-mono text-xs">02</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Bureau of Statistics<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Dados econômicos oficiais do Paquistão.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">pbs.gov.pk/</div></a><a href="https://www.fifa.com/" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-bold uppercase rounded">Fonte 3</span><span class="text-slate-300 font-mono text-xs">03</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">FIFA — Indústria Esportiva<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Fonte relacionada à fabricação de bolas utilizadas internacionalmente.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">fifa.com/</div></a><a href="https://www.trade.gov/country-commercial-guides/pakistan-market-overview" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase rounded">Fonte 4</span><span class="text-slate-300 font-mono text-xs">04</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">International Trade Admin<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Dados comerciais e exportações do Paquistão para os EUA.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">trade.gov/country-commercial-guides/pakistan-market-overview</div></a><a href="https://www.adb.org/countries/pakistan/main" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-rose-50 text-rose-600 text-[10px] font-bold uppercase rounded">Fonte 5</span><span class="text-slate-300 font-mono text-xs">05</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Asian Development Bank<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Pesquisas econômicas, agricultura e desenvolvimento industrial do país.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">adb.org/countries/pakistan/main</div></a></div></section><section id="natureza" class="scroll-mt-32"><div class="mb-8 border-b border-slate-200 pb-4"><h2 class="text-2xl font-bold text-slate-900 flex items-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mountain h-6 w-6 text-emerald-700" aria-hidden="true"><path d="m8 3 4 8 5-5 5 15H2L8 3z"></path></svg>Fontes Naturais e Geográficas</h2></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6"><a href="https://www.britannica.com/place/K2" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded">Fonte 1</span><span class="text-slate-300 font-mono text-xs">01</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Britannica — K2<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Informações detalhadas sobre a montanha K2, a segunda maior do mundo.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">britannica.com/place/K2</div></a><a href="https://www.nationalgeographic.com/environment/article/pakistan" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase rounded">Fonte 2</span><span class="text-slate-300 font-mono text-xs">02</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Nature Exploration<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Fonte sobre relevo, clima e ecossistemas.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">nationalgeographic.com/environment/article/pakistan</div></a><a href="https://pt.wikipedia.org/wiki/Rio_Indo" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-bold uppercase rounded">Fonte 3</span><span class="text-slate-300 font-mono text-xs">03</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Wikipedia — Rio Indo<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Fonte utilizada para informações sobre a bacia e conservação do Rio Indo.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">pt.wikipedia.org/wiki/Rio_Indo</div></a><a href="https://www.britannica.com/place/Himalayas" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase rounded">Fonte 4</span><span class="text-slate-300 font-mono text-xs">04</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Britannica — Himalayas<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Informações sobre o Himalaia, Karakoram e relevo da região.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">britannica.com/place/Himalayas</div></a><a href="https://earthobservatory.nasa.gov/" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-rose-50 text-rose-600 text-[10px] font-bold uppercase rounded">Fonte 5</span><span class="text-slate-300 font-mono text-xs">05</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">NASA Earth Observatory<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Imagens de satélite e análises naturais sobre clima e paisagens.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">earthobservatory.nasa.gov/</div></a></div></section><section id="mapas" class="scroll-mt-32"><div class="mb-8 border-b border-slate-200 pb-4"><h2 class="text-2xl font-bold text-slate-900 flex items-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map h-6 w-6 text-emerald-700" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"></path><path d="M15 5.764v15"></path><path d="M9 3.236v15"></path></svg>Fontes Cartográficas Oficiais</h2></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6"><a href="https://maps.google.com/maps" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded">Fonte 1</span><span class="text-slate-300 font-mono text-xs">01</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Google Maps<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Referência geográfica do país, fronteiras e vizinhanças.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">maps.google.com/maps?q=Pakistan</div></a><a href="https://commons.wikimedia.org/wiki/Atlas_of_Pakistan" target="_blank" rel="noopener noreferrer" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group h-full relative overflow-hidden" style="opacity: 1; transform: none;"><div class="flex justify-between items-start mb-4 relative z-10"><span class="px-2 py-1 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase rounded">Fonte 2</span><span class="text-slate-300 font-mono text-xs">02</span></div><h3 class="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors flex items-center justify-between relative z-10 pr-6">Atlas of Pakistan<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link h-4 w-4 text-emerald-500 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all absolute right-0" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></h3><p class="text-sm text-slate-600 mb-4 flex-1 relative z-10">Mapas de domínio público usados como referência visual.</p><div class="text-xs font-mono text-emerald-600 bg-emerald-50 p-2 rounded truncate transition-colors group-hover:bg-emerald-100/50 relative z-10">commons.wikimedia.org/wiki/Atlas_of_Pakistan</div></a></div></section></div><footer class="mt-8 h-12 bg-slate-100 border-t border-slate-200 flex items-center px-6 md:px-10 justify-between shrink-0"><div class="flex items-center gap-6"><div class="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest"><div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div> LIVE SOURCE</div><span class="text-xs text-slate-400 hidden sm:inline">© 2026 Projeto Acadêmico Paquistão</span></div><div class="text-[10px] text-slate-400 font-medium italic">Developed for GitHub Pages Deployment</div></footer></div></main></div></div>
+    <script type="module" src="https://ais-dev-v3dkvqem2spqjaeuaykprf-145694151343.us-east1.run.app/src/main.tsx"></script>
+  
+
+
+</body>
